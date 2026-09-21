@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sitte Jane</title>
+  <title>Horror Snake Game</title>
   <style>
     * {
       box-sizing: border-box;
@@ -12,7 +12,7 @@
     }
 
     body {
-      background-color: #1a1a1a;
+      background-color: #0d0d0d;
       color: #fff;
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       display: flex;
@@ -20,10 +20,34 @@
       align-items: center;
       justify-content: center;
       min-height: 100vh;
+      overflow: hidden;
     }
 
     h1 {
       margin-bottom: 10px;
+      color: #e50914;
+      text-shadow: 0 0 10px rgba(229, 9, 20, 0.5);
+    }
+
+    .controls-panel {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 15px;
+      align-items: center;
+    }
+
+    label {
+      font-size: 0.9rem;
+      color: #ccc;
+    }
+
+    select {
+      padding: 5px 10px;
+      background: #222;
+      color: #fff;
+      border: 1px solid #444;
+      border-radius: 4px;
+      cursor: pointer;
     }
 
     .score-board {
@@ -32,14 +56,14 @@
     }
 
     canvas {
-      border: 3px solid #4CAF50;
+      border: 3px solid #e50914;
       background-color: #000;
-      box-shadow: 0 0 20px rgba(76, 175, 80, 0.3);
+      box-shadow: 0 0 20px rgba(229, 9, 20, 0.3);
     }
 
     .controls-hint {
       margin-top: 15px;
-      color: #aaa;
+      color: #888;
       font-size: 0.9rem;
     }
 
@@ -47,7 +71,7 @@
       margin-top: 15px;
       padding: 10px 20px;
       font-size: 1rem;
-      background-color: #4CAF50;
+      background-color: #e50914;
       color: white;
       border: none;
       border-radius: 5px;
@@ -56,19 +80,70 @@
     }
 
     button:hover {
-      background-color: #45a049;
+      background-color: #b20710;
+    }
+
+    #jumpscareOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: black;
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+    }
+
+    #jumpscareImg {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      animation: shake 0.08s infinite alternate;
+    }
+
+    @keyframes shake {
+      0% { transform: scale(1.1) translate(8px, 8px) rotate(2deg); }
+      100% { transform: scale(1.2) translate(-8px, -8px) rotate(-2deg); }
     }
   </style>
 </head>
 <body>
 
-  <h1>Snake Game</h1>
+  <h1>Horror Snake</h1>
+
+  <div class="controls-panel">
+    <div>
+      <label for="modeSelect">Game Mode: </label>
+      <select id="modeSelect">
+        <option value="classic">Classic (Walls)</option>
+        <option value="nowalls">No Walls (Pass Through)</option>
+        <option value="speed">Speed Run (Fast)</option>
+      </select>
+    </div>
+    <div>
+      <label for="skinSelect">Snake Skin: </label>
+      <select id="skinSelect">
+        <option value="green">Classic Green</option>
+        <option value="cyan">Neon Cyan</option>
+        <option value="flame">Flame Orange</option>
+        <option value="rainbow">Rainbow Shift</option>
+      </select>
+    </div>
+  </div>
+
   <div class="score-board">
     Score: <span id="score">0</span> | High Score: <span id="high-score">0</span>
   </div>
+
   <canvas id="gameCanvas" width="400" height="400"></canvas>
   <button id="restartBtn">Restart Game</button>
   <p class="controls-hint">Use <strong>Arrow Keys</strong> or <strong>WASD</strong> to play.</p>
+
+  <div id="jumpscareOverlay">
+    <img id="jumpscareImg" src="" alt="Jumpscare">
+  </div>
 
   <script>
     const canvas = document.getElementById('gameCanvas');
@@ -76,6 +151,10 @@
     const scoreElement = document.getElementById('score');
     const highScoreElement = document.getElementById('high-score');
     const restartBtn = document.getElementById('restartBtn');
+    const modeSelect = document.getElementById('modeSelect');
+    const skinSelect = document.getElementById('skinSelect');
+    const jumpscareOverlay = document.getElementById('jumpscareOverlay');
+    const jumpscareImg = document.getElementById('jumpscareImg');
 
     const gridSize = 20;
     const tileCount = canvas.width / gridSize;
@@ -85,11 +164,99 @@
     let dx = gridSize;
     let dy = 0;
     let score = 0;
-    let highScore = localStorage.getItem('snakeHighScore') || 0;
+    let highScore = localStorage.getItem('horrorSnakeHighScore') || 0;
     let gameInterval;
     let changingDirection = false;
+    let gameSpeed = 100;
 
     highScoreElement.textContent = highScore;
+
+    const skins = {
+      green: { head: '#4CAF50', body: '#81C784' },
+      cyan: { head: '#00E5FF', body: '#18FFFF' },
+      flame: { head: '#FF3D00', body: '#FF9100' },
+      rainbow: { head: '#FF0055', body: 'rainbow' }
+    };
+
+    function generateJumpscareCanvas() {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = 300;
+      tempCanvas.height = 450;
+      const tCtx = tempCanvas.getContext('2d');
+
+      tCtx.fillStyle = '#050505';
+      tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+      // Face silhouette
+      tCtx.fillStyle = '#1c1c1c';
+      tCtx.beginPath();
+      tCtx.ellipse(150, 200, 110, 160, 0, 0, Math.PI * 2);
+      tCtx.fill();
+
+      // Eye sockets
+      tCtx.fillStyle = '#000';
+      tCtx.beginPath();
+      tCtx.ellipse(100, 150, 35, 45, 0, 0, Math.PI * 2);
+      tCtx.ellipse(200, 150, 35, 45, 0, 0, Math.PI * 2);
+      tCtx.fill();
+
+      // Glowing pupils
+      tCtx.fillStyle = '#fff';
+      tCtx.beginPath();
+      tCtx.arc(100, 150, 3, 0, Math.PI * 2);
+      tCtx.arc(200, 150, 3, 0, Math.PI * 2);
+      tCtx.fill();
+
+      // Mouth
+      tCtx.fillStyle = '#000';
+      tCtx.beginPath();
+      tCtx.ellipse(150, 290, 45, 80, 0, 0, Math.PI * 2);
+      tCtx.fill();
+
+      // Teeth
+      tCtx.fillStyle = '#d1d1d1';
+      for (let i = 115; i <= 185; i += 10) {
+        tCtx.fillRect(i, 215, 4, 18);
+        tCtx.fillRect(i, 345, 4, 18);
+      }
+
+      return tempCanvas.toDataURL();
+    }
+
+    jumpscareImg.src = generateJumpscareCanvas();
+
+    function playScreamSound() {
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // Screaming oscillator
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(900, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(120, audioCtx.currentTime + 1.0);
+
+        gain.gain.setValueAtTime(1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.0);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        osc.start();
+        osc.stop(audioCtx.currentTime + 1.0);
+      } catch(e) {}
+    }
+
+    function triggerJumpscare() {
+      jumpscareOverlay.style.display = 'flex';
+      playScreamSound();
+
+      setTimeout(() => {
+        jumpscareOverlay.style.display = 'none';
+        alert(`Game Over! Final Score: ${score}`);
+      }, 1200);
+    }
 
     function startGame() {
       snake = [
@@ -101,15 +268,19 @@
       dy = 0;
       score = 0;
       scoreElement.textContent = score;
+
+      const selectedMode = modeSelect.value;
+      gameSpeed = selectedMode === 'speed' ? 50 : 100;
+
       createFood();
       clearInterval(gameInterval);
-      gameInterval = setInterval(gameLoop, 100);
+      gameInterval = setInterval(gameLoop, gameSpeed);
     }
 
     function gameLoop() {
       if (hasGameEnded()) {
         clearInterval(gameInterval);
-        alert(`Game Over! Final Score: ${score}`);
+        triggerJumpscare();
         return;
       }
 
@@ -126,8 +297,17 @@
     }
 
     function drawSnake() {
+      const selectedSkin = skinSelect.value;
+      const skinConfig = skins[selectedSkin];
+
       snake.forEach((part, index) => {
-        ctx.fillStyle = index === 0 ? '#4CAF50' : '#81C784';
+        if (selectedSkin === 'rainbow') {
+          const hue = (index * 20 + Date.now() / 10) % 360;
+          ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+        } else {
+          ctx.fillStyle = index === 0 ? skinConfig.head : skinConfig.body;
+        }
+
         ctx.strokeStyle = '#000';
         ctx.fillRect(part.x, part.y, gridSize, gridSize);
         ctx.strokeRect(part.x, part.y, gridSize, gridSize);
@@ -135,7 +315,17 @@
     }
 
     function moveSnake() {
-      const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+      let headX = snake[0].x + dx;
+      let headY = snake[0].y + dy;
+
+      if (modeSelect.value === 'nowalls') {
+        if (headX < 0) headX = canvas.width - gridSize;
+        if (headX >= canvas.width) headX = 0;
+        if (headY < 0) headY = canvas.height - gridSize;
+        if (headY >= canvas.height) headY = 0;
+      }
+
+      const head = { x: headX, y: headY };
       snake.unshift(head);
 
       const hasEatenFood = snake[0].x === food.x && snake[0].y === food.y;
@@ -145,7 +335,7 @@
         if (score > highScore) {
           highScore = score;
           highScoreElement.textContent = highScore;
-          localStorage.setItem('snakeHighScore', highScore);
+          localStorage.setItem('horrorSnakeHighScore', highScore);
         }
         createFood();
       } else {
@@ -165,8 +355,11 @@
     }
 
     function drawFood() {
-      ctx.fillStyle = '#FF5252';
+      ctx.fillStyle = '#FF0055';
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = '#FF0055';
       ctx.fillRect(food.x, food.y, gridSize, gridSize);
+      ctx.shadowBlur = 0;
     }
 
     function hasGameEnded() {
@@ -174,12 +367,16 @@
         if (snake[i].x === snake[0].x && snake[i].y === snake[0].y) return true;
       }
 
-      const hitLeftWall = snake[0].x < 0;
-      const hitRightWall = snake[0].x >= canvas.width;
-      const hitToptWall = snake[0].y < 0;
-      const hitBottomWall = snake[0].y >= canvas.height;
+      if (modeSelect.value !== 'nowalls') {
+        const hitLeftWall = snake[0].x < 0;
+        const hitRightWall = snake[0].x >= canvas.width;
+        const hitTopWall = snake[0].y < 0;
+        const hitBottomWall = snake[0].y >= canvas.height;
 
-      return hitLeftWall || hitRightWall || hitToptWall || hitBottomWall;
+        return hitLeftWall || hitRightWall || hitTopWall || hitBottomWall;
+      }
+
+      return false;
     }
 
     function changeDirection(event) {
@@ -220,6 +417,7 @@
 
     document.addEventListener('keydown', changeDirection);
     restartBtn.addEventListener('click', startGame);
+    modeSelect.addEventListener('change', startGame);
 
     startGame();
   </script>
